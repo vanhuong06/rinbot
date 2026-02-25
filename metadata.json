@@ -1,0 +1,5 @@
+{
+  "name": "Bot Mua Sắm Telegram",
+  "description": "Bot giám sát tình trạng hàng hóa và tự động mua hàng qua Telegram.",
+  "requestFramePermissions": []
+}
