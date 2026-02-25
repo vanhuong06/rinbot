@@ -1368,11 +1368,20 @@ async function startServer() {
         { command: 'logs', description: 'Xem nhật ký hoạt động' },
       ]).catch(err => console.error("Failed to set commands:", err));
 
-      bot.launch().then(() => {
-        console.log("✅ Telegram bot is running (Polling)...");
-      }).catch((err) => {
-        console.error("❌ Failed to launch Telegram bot:", err);
-      });
+      const launchBot = async (retries = 3) => {
+        try {
+          await bot.launch({ dropPendingUpdates: true });
+          console.log("✅ Telegram bot is running (Polling)...");
+        } catch (err: any) {
+          if (err.response && err.response.error_code === 409 && retries > 0) {
+            console.warn(`⚠️ Bot launch conflict (409). Retrying in 3 seconds... (${retries} retries left)`);
+            setTimeout(() => launchBot(retries - 1), 3000);
+          } else {
+            console.error("❌ Failed to launch Telegram bot:", err);
+          }
+        }
+      };
+      launchBot();
     } catch (err) {
       console.error("❌ Unexpected error during bot launch:", err);
     }

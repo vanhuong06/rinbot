@@ -33,6 +33,11 @@ export default function App() {
         console.error(`Stats API returned ${res.status}: ${text.substring(0, 100)}`);
         return;
       }
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.warn("Expected JSON, got HTML. Server might be restarting.");
+        return;
+      }
       const data = await res.json();
       setStats(data);
     } catch (err) {
@@ -49,6 +54,11 @@ export default function App() {
       if (!res.ok) {
         const text = await res.text();
         console.error(`External API returned ${res.status}: ${text.substring(0, 100)}`);
+        return;
+      }
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.warn("Expected JSON, got HTML. Server might be restarting.");
         return;
       }
       const data = await res.json();
