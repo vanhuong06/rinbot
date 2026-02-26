@@ -185,8 +185,8 @@ app.get("/api/external-list", async (req, res) => {
     return res.status(400).json({ error: "Username and password are required" });
   }
   try {
-    const response = await axiosInstance.get(`https://shop.saidiait.top/api/ListResource.php?username=${username}&password=${password}`);
-    res.json(response.data);
+    const data = await getCachedAPI(String(username), String(password));
+    res.json(data);
   } catch (error) {
     console.error("External List API Error:", error);
     res.status(500).json({ error: "Failed to fetch external API" });
@@ -232,6 +232,7 @@ bot.use(async (ctx, next) => {
 // Simple API Cache
 let apiCache: { [key: string]: { data: any, timestamp: number } } = {};
 const CACHE_TTL = 1500; // 1.5 seconds for faster stock detection
+const pendingRequests = new Map<string, Promise<any>>();
 
 // Tối ưu RAM: Tự động dọn dẹp cache hết hạn mỗi phút
 setInterval(() => {
@@ -254,19 +255,30 @@ async function getCachedAPI(username: string, password: string) {
     return apiCache[cacheKey].data;
   }
   
-  try {
-    const response = await axiosInstance.get(`https://shop.saidiait.top/api/ListResource.php?username=${username}&password=${password}`);
-    apiCache[cacheKey] = {
-      data: response.data,
-      timestamp: Date.now()
-    };
-    return response.data;
-  } catch (error) {
-    console.error("API Fetch Error:", error);
-    // Return stale cache if available on error
-    if (apiCache[cacheKey]) return apiCache[cacheKey].data;
-    throw error;
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey);
   }
+  
+  const fetchPromise = (async () => {
+    try {
+      const response = await axiosInstance.get(`https://shop.saidiait.top/api/ListResource.php?username=${username}&password=${password}`);
+      apiCache[cacheKey] = {
+        data: response.data,
+        timestamp: Date.now()
+      };
+      return response.data;
+    } catch (error) {
+      console.error("API Fetch Error:", error);
+      // Return stale cache if available on error
+      if (apiCache[cacheKey]) return apiCache[cacheKey].data;
+      throw error;
+    } finally {
+      pendingRequests.delete(cacheKey);
+    }
+  })();
+  
+  pendingRequests.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 async function getBalance(username: string, password: string) {
