@@ -233,6 +233,21 @@ bot.use(async (ctx, next) => {
 let apiCache: { [key: string]: { data: any, timestamp: number } } = {};
 const CACHE_TTL = 1500; // 1.5 seconds for faster stock detection
 
+// Tối ưu RAM: Tự động dọn dẹp cache hết hạn mỗi phút
+setInterval(() => {
+  const now = Date.now();
+  let deletedCount = 0;
+  for (const key in apiCache) {
+    if (now - apiCache[key].timestamp > CACHE_TTL) {
+      delete apiCache[key];
+      deletedCount++;
+    }
+  }
+  if (deletedCount > 0) {
+    console.log(`[Memory GC] Đã dọn dẹp ${deletedCount} mục cache API cũ.`);
+  }
+}, 60000);
+
 async function getCachedAPI(username: string, password: string) {
   const cacheKey = `${username}:${password}`;
   if (apiCache[cacheKey] && (Date.now() - apiCache[cacheKey].timestamp < CACHE_TTL)) {
@@ -315,6 +330,7 @@ bot.start((ctx) => {
     "/logs - Xem nhật ký hoạt động\n" +
     "/clear_logs - Xóa nhật ký hoạt động\n" +
     "/status - Kiểm tra trạng thái hoạt động của Bot\n" +
+    "/sysinfo - Xem báo cáo RAM và bộ nhớ đệm\n" +
     "/balance - Kiểm tra số dư tài khoản\n" +
     "/menu - Hiển thị menu điều khiển nhanh"
   );
@@ -666,9 +682,26 @@ bot.command("status", (ctx) => {
     `🔄 **Tiến trình chạy ngầm:**\n` +
     `🔹 Quét kho & Auto-buy (10s): \`${lastScanTime}\`\n` +
     `🔹 Báo cáo Azeem (30s): \`${lastAzeemReportTime}\`\n\n` +
-    `✅ Bot đang hoạt động bình thường.`;
+    `✅ Bot đang hoạt động bình thường. (Xem thêm: /sysinfo)`;
 
   ctx.reply(statusMsg, { parse_mode: 'Markdown' });
+});
+
+bot.command("sysinfo", (ctx) => {
+  const memUsage = process.memoryUsage();
+  const formatBytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+
+  const sysInfoMsg = `🖥 **Báo cáo Hệ thống & RAM:**\n\n` +
+    `🔹 RSS (Tổng RAM cấp phát): \`${formatBytes(memUsage.rss)}\`\n` +
+    `🔹 Heap Total (Vùng nhớ V8): \`${formatBytes(memUsage.heapTotal)}\`\n` +
+    `🔹 Heap Used (RAM đang dùng): \`${formatBytes(memUsage.heapUsed)}\`\n` +
+    `🔹 External (C++ objects): \`${formatBytes(memUsage.external)}\`\n\n` +
+    `📦 **Bộ nhớ đệm (Cache):**\n` +
+    `🔹 API Cache: \`${Object.keys(apiCache).length} mục\`\n` +
+    `🔹 Azeem Cache: \`${lastAzeemAmounts.size} mục\`\n\n` +
+    `_Mẹo: Hệ thống đã được tối ưu tự động dọn dẹp cache mỗi phút để giải phóng RAM._`;
+
+  ctx.reply(sysInfoMsg, { parse_mode: 'Markdown' });
 });
 
 bot.command("balance", async (ctx) => {
