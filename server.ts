@@ -811,7 +811,12 @@ bot.command("buy", async (ctx) => {
           return acc.trim();
         };
 
-        if (Array.isArray(data.data)) {
+        if (data.data && Array.isArray(data.data.lists)) {
+          fileContent = data.data.lists.map((a: any) => {
+            if (a && typeof a === 'object' && a.account) return processAccount(String(a.account));
+            return JSON.stringify(a);
+          }).join("\n");
+        } else if (Array.isArray(data.data)) {
           fileContent = data.data.map((a: any) => {
             if (typeof a === 'string') return processAccount(a);
             if (a && typeof a === 'object' && a.account) return processAccount(String(a.account));
@@ -1074,7 +1079,12 @@ async function processMonitors(monitors: any[]) {
                           return acc.trim();
                         };
 
-                        if (Array.isArray(buyResponse.data.data)) {
+                        if (buyResponse.data.data && Array.isArray(buyResponse.data.data.lists)) {
+                          fileContent = buyResponse.data.data.lists.map((a: any) => {
+                            if (a && typeof a === 'object' && a.account) return processAccount(String(a.account));
+                            return JSON.stringify(a);
+                          }).join("\n");
+                        } else if (Array.isArray(buyResponse.data.data)) {
                           fileContent = buyResponse.data.data.map((a: any) => {
                             if (typeof a === 'string') return processAccount(a);
                             if (a && typeof a === 'object' && a.account) return processAccount(String(a.account));
