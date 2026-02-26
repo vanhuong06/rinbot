@@ -862,9 +862,16 @@ bot.command("buy", async (ctx) => {
         }
         
         const fileBuffer = Buffer.from(fileContent, 'utf-8');
+        
+        let fileName = `accounts_${productId}_${Date.now()}.txt`;
+        if (data.data && data.data.name && data.data.amount && data.data.trans_id) {
+          const safeName = String(data.data.name).replace(/[^a-zA-Z0-9]/g, '');
+          fileName = `${safeName}_${data.data.amount}_${data.data.trans_id}.txt`;
+        }
+
         await ctx.replyWithDocument({
           source: fileBuffer,
-          filename: `accounts_${productId}_${Date.now()}.txt`
+          filename: fileName
         });
       } catch (fileErr) {
         console.error("Failed to send document:", fileErr);
@@ -1130,9 +1137,16 @@ async function processMonitors(monitors: any[]) {
                         }
                         
                         const fileBuffer = Buffer.from(fileContent, 'utf-8');
+                        
+                        let fileName = `accounts_${currentItem.product_id}_${Date.now()}.txt`;
+                        if (buyResponse.data.data && buyResponse.data.data.name && buyResponse.data.data.amount && buyResponse.data.data.trans_id) {
+                          const safeName = String(buyResponse.data.data.name).replace(/[^a-zA-Z0-9]/g, '');
+                          fileName = `${safeName}_${buyResponse.data.data.amount}_${buyResponse.data.data.trans_id}.txt`;
+                        }
+
                         await bot.telegram.sendDocument(currentItem.chat_id, {
                           source: fileBuffer,
-                          filename: `accounts_${currentItem.product_id}_${Date.now()}.txt`
+                          filename: fileName
                         });
                       } catch (fileErr) {
                         console.error("Failed to send document:", fileErr);
