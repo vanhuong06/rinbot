@@ -799,7 +799,38 @@ bot.command("buy", async (ctx) => {
 
     if (data.status === "success") {
       log(`Mua thành công ID ${productId} (SL: ${amount})`, userId);
-      ctx.reply(`✅ Mua hàng thành công!\n\n<pre>${jsonStr}</pre>`, { parse_mode: 'HTML' });
+      await ctx.reply(`✅ Mua hàng thành công!`);
+
+      try {
+        let fileContent = "";
+        const processAccount = (acc: string) => {
+          const parts = acc.split('|');
+          if (parts.length >= 2) {
+            return `${parts[0].trim()}|${parts[1].trim()}`;
+          }
+          return acc.trim();
+        };
+
+        if (Array.isArray(data.data)) {
+          fileContent = data.data.map((a: any) => {
+            if (typeof a === 'string') return processAccount(a);
+            if (a && typeof a === 'object' && a.account) return processAccount(String(a.account));
+            return JSON.stringify(a);
+          }).join("\n");
+        } else if (typeof data.data === "string") {
+          fileContent = data.data.split('\n').filter((line: string) => line.trim() !== '').map(processAccount).join("\n");
+        } else {
+          fileContent = jsonStr;
+        }
+        
+        const fileBuffer = Buffer.from(fileContent, 'utf-8');
+        await ctx.replyWithDocument({
+          source: fileBuffer,
+          filename: `accounts_${productId}_${Date.now()}.txt`
+        });
+      } catch (fileErr) {
+        console.error("Failed to send document:", fileErr);
+      }
     } else {
       let errorMsg = data.message || "Lỗi không xác định từ API";
       if (errorMsg.toLowerCase().includes("số dư") || errorMsg.toLowerCase().includes("không đủ tiền") || errorMsg.toLowerCase().includes("balance")) {
@@ -1028,8 +1059,7 @@ async function processMonitors(monitors: any[]) {
                       
                       await bot.telegram.sendMessage(currentItem.chat_id, 
                         `✅ **Đặt hàng tự động thành công!**${limitMsg}\n\n` +
-                        `📦 Sản phẩm: ${currentItem.product_name}\n\n` +
-                        `📄 **Dữ liệu tài khoản:**\n<pre>${jsonStr}</pre>`, 
+                        `📦 Sản phẩm: ${currentItem.product_name}`, 
                         { parse_mode: 'HTML' }
                       );
 
@@ -1276,7 +1306,7 @@ cron.schedule("*/15 * * * * *", async () => {
         const categories = data.categories || [];
         
         let hasChanges = false;
-        let report = "📋 **BÁO CÁO KHO AZEEM ĐỊNH KỲ:**\n\n";
+        let report = "📋 **THÔNG BÁO BIẾN ĐỘNG KHO AZEEM:**\n\n";
         for (const id of targetIds) {
           const product = findProductInCategories(categories, id);
           const name = product ? product.name : `ID ${id}`;
@@ -1286,16 +1316,23 @@ cron.schedule("*/15 * * * * *", async () => {
           const cacheKey = `${userId}:${id}`;
           const lastAmount = lastAzeemAmounts.get(cacheKey);
           
-          // Report if amount changed, or if it's the first run and amount > 0
+          let changeText = "";
           if (lastAmount !== undefined && lastAmount !== amount) {
             hasChanges = true;
+            const diff = amount - lastAmount;
+            if (diff > 0) {
+              changeText = ` (📈 Tăng ${diff})`;
+            } else {
+              changeText = ` (📉 Giảm ${Math.abs(diff)})`;
+            }
           } else if (lastAmount === undefined && amount > 0) {
             hasChanges = true;
+            changeText = ` (🆕 Mới xuất hiện)`;
           }
           
           lastAzeemAmounts.set(cacheKey, amount);
           
-          report += `🔹 **${name}** (ID: ${id})\n   📦 Số lượng: **${amount}**\n   💰 Giá: ${price}\n\n`;
+          report += `🔹 **${name}** (ID: ${id})\n   📦 Số lượng: **${amount}**${changeText}\n   💰 Giá: ${price}\n\n`;
         }
         report += `_Cập nhật tự động: ${new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}_`;
         
