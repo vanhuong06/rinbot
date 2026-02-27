@@ -1039,7 +1039,7 @@ async function processMonitors(monitors: any[]) {
                 const nowStr = new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, hour: '2-digit', minute: '2-digit' });
                 if (nowStr === currentItem.schedule_time) {
                   // Time matched! Enable auto-buy
-                  db.prepare("UPDATE monitors SET auto_buy = 1, auto_buy_amount = ?, buy_limit = ?, schedule_time = NULL, status = 'monitoring' WHERE id = ?")
+                  db.prepare("UPDATE monitors SET auto_buy = 1, auto_buy_amount = ?, buy_limit = ?, bought_count = 0, schedule_time = NULL, status = 'monitoring' WHERE id = ?")
                     .run(currentItem.schedule_amount, currentItem.schedule_limit, currentItem.id);
                   
                   // Update currentItem object so it processes immediately
@@ -1328,8 +1328,9 @@ bot.command("autobuy", async (ctx) => {
 
   // Try to update by Monitor ID first, then by Product ID
   // When enabling auto_buy (val === "1"), we reset status to 'monitoring' to trigger an immediate check in the next cycle
-  const stmt = db.prepare("UPDATE monitors SET auto_buy = ?, auto_buy_amount = ?, buy_limit = ?, status = CASE WHEN ? = 1 THEN 'monitoring' ELSE status END WHERE (id = ? OR product_id = ?) AND user_id = ?");
-  const result = stmt.run(parseInt(val), parseInt(amount), parseInt(limit), parseInt(val), id, id, userId);
+  // We also reset bought_count to 0 so it doesn't accumulate from previous runs
+  const stmt = db.prepare("UPDATE monitors SET auto_buy = ?, auto_buy_amount = ?, buy_limit = ?, bought_count = CASE WHEN ? = 1 THEN 0 ELSE bought_count END, status = CASE WHEN ? = 1 THEN 'monitoring' ELSE status END WHERE (id = ? OR product_id = ?) AND user_id = ?");
+  const result = stmt.run(parseInt(val), parseInt(amount), parseInt(limit), parseInt(val), parseInt(val), id, id, userId);
 
   if (result.changes > 0) {
     log(`Cập nhật Auto-buy cho ID ${id}: ${val === "1" ? "Bật" : "Tắt"} (SL: ${amount}, Giới hạn: ${limit === "0" ? "Không" : limit})`, userId);
