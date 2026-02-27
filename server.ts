@@ -1266,7 +1266,7 @@ bot.command("stop", (ctx) => {
   }
 });
 
-bot.command("autobuy", (ctx) => {
+bot.command("autobuy", async (ctx) => {
   const userId = ctx.from.id.toString();
   const user = getUser(userId);
   if (!user) return ctx.reply("⚠️ Bạn chưa đăng nhập. Vui lòng đăng nhập trước khi bật Auto-buy: /login <user> <pass>");
@@ -1278,6 +1278,53 @@ bot.command("autobuy", (ctx) => {
   const limit = parts[4] || "0";
 
   if (!id || !val) return ctx.reply("Sử dụng: /autobuy <id> <1|0> <số lượng mỗi lần> <tổng giới hạn mua>\nVí dụ: /autobuy 1 1 5 30 (Bật auto buy cho ID 1, mỗi lần mua 5 con, dừng khi mua đủ 30 con)");
+
+  if (val === "1") {
+    try {
+      ctx.reply("🔍 Đang kiểm tra số dư và thông tin sản phẩm...");
+      const monitor = db.prepare("SELECT * FROM monitors WHERE (id = ? OR product_id = ?) AND user_id = ?").get(id, id, userId) as any;
+      if (!monitor) {
+        return ctx.reply("❌ Không tìm thấy sản phẩm trong danh sách theo dõi của bạn. Vui lòng dùng /list để kiểm tra lại ID (Monitor ID hoặc Product ID).");
+      }
+
+      const data = await getCachedAPI(user.username, user.password);
+      const categories = data.categories || [];
+      const product = findProductInCategories(categories, monitor.product_id);
+
+      if (!product) {
+        return ctx.reply(`❌ Không tìm thấy thông tin sản phẩm ID ${monitor.product_id} trên shop để kiểm tra giá.`);
+      }
+
+      const balanceStr = await getBalance(user.username, user.password);
+      if (!balanceStr) {
+        return ctx.reply("❌ Không thể lấy số dư tài khoản của bạn. Vui lòng thử lại sau.");
+      }
+
+      const parseCurrency = (str: string) => {
+        if (!str) return 0;
+        return parseFloat(str.replace(/[^\d]/g, '')) || 0;
+      };
+
+      const price = parseCurrency(product.price);
+      const balance = parseCurrency(balanceStr);
+      const totalCost = price * parseInt(amount);
+
+      if (balance < totalCost) {
+        return ctx.reply(
+          `❌ **Không đủ số dư để bật Auto-buy!**\n\n` +
+          `🔹 Sản phẩm: ${product.name}\n` +
+          `🔹 Giá mỗi sản phẩm: ${product.price}\n` +
+          `🔹 Số lượng mua mỗi lần: ${amount}\n` +
+          `🔹 Tổng tiền cần: ${totalCost.toLocaleString('vi-VN')}đ\n` +
+          `💰 Số dư hiện tại: ${balanceStr}\n\n` +
+          `⚠️ Vui lòng nạp thêm tiền trước khi bật Auto-buy.`
+        );
+      }
+    } catch (error) {
+      console.error("Autobuy Balance Check Error:", error);
+      return ctx.reply("❌ Đã xảy ra lỗi khi kiểm tra số dư. Vui lòng thử lại sau.");
+    }
+  }
 
   // Try to update by Monitor ID first, then by Product ID
   // When enabling auto_buy (val === "1"), we reset status to 'monitoring' to trigger an immediate check in the next cycle
@@ -1297,7 +1344,7 @@ bot.command("autobuy", (ctx) => {
   }
 });
 
-bot.command("schedule", (ctx) => {
+bot.command("schedule", async (ctx) => {
   const userId = ctx.from.id.toString();
   const user = getUser(userId);
   if (!user) return ctx.reply("⚠️ Bạn chưa đăng nhập. Vui lòng đăng nhập trước khi hẹn giờ: /login <user> <pass>");
@@ -1313,6 +1360,51 @@ bot.command("schedule", (ctx) => {
   // Validate time format HH:mm
   if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) {
     return ctx.reply("❌ Định dạng giờ không hợp lệ. Vui lòng nhập theo định dạng HH:mm (VD: 08:30, 15:45)");
+  }
+
+  try {
+    ctx.reply("🔍 Đang kiểm tra số dư và thông tin sản phẩm...");
+    const monitor = db.prepare("SELECT * FROM monitors WHERE (id = ? OR product_id = ?) AND user_id = ?").get(id, id, userId) as any;
+    if (!monitor) {
+      return ctx.reply("❌ Không tìm thấy sản phẩm trong danh sách theo dõi của bạn. Vui lòng dùng /list để kiểm tra lại ID (Monitor ID hoặc Product ID).");
+    }
+
+    const data = await getCachedAPI(user.username, user.password);
+    const categories = data.categories || [];
+    const product = findProductInCategories(categories, monitor.product_id);
+
+    if (!product) {
+      return ctx.reply(`❌ Không tìm thấy thông tin sản phẩm ID ${monitor.product_id} trên shop để kiểm tra giá.`);
+    }
+
+    const balanceStr = await getBalance(user.username, user.password);
+    if (!balanceStr) {
+      return ctx.reply("❌ Không thể lấy số dư tài khoản của bạn. Vui lòng thử lại sau.");
+    }
+
+    const parseCurrency = (str: string) => {
+      if (!str) return 0;
+      return parseFloat(str.replace(/[^\d]/g, '')) || 0;
+    };
+
+    const price = parseCurrency(product.price);
+    const balance = parseCurrency(balanceStr);
+    const totalCost = price * parseInt(amount);
+
+    if (balance < totalCost) {
+      return ctx.reply(
+        `❌ **Không đủ số dư để hẹn giờ Auto-buy!**\n\n` +
+        `🔹 Sản phẩm: ${product.name}\n` +
+        `🔹 Giá mỗi sản phẩm: ${product.price}\n` +
+        `🔹 Số lượng mua mỗi lần: ${amount}\n` +
+        `🔹 Tổng tiền cần: ${totalCost.toLocaleString('vi-VN')}đ\n` +
+        `💰 Số dư hiện tại: ${balanceStr}\n\n` +
+        `⚠️ Vui lòng nạp thêm tiền trước khi đặt lịch hẹn giờ.`
+      );
+    }
+  } catch (error) {
+    console.error("Schedule Balance Check Error:", error);
+    return ctx.reply("❌ Đã xảy ra lỗi khi kiểm tra số dư. Vui lòng thử lại sau.");
   }
 
   const stmt = db.prepare("UPDATE monitors SET schedule_time = ?, schedule_amount = ?, schedule_limit = ? WHERE (id = ? OR product_id = ?) AND user_id = ?");
