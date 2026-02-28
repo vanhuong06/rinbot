@@ -1092,9 +1092,8 @@ async function processMonitors(monitors: any[]) {
                   }
                   
                   const remaining = buyLimit - currentBought;
-                  if (buyAmount > remaining) {
-                    buyAmount = remaining;
-                  }
+                  // Mua tối đa số lượng cần thiết để đạt giới hạn nhanh nhất
+                  buyAmount = remaining;
                 }
 
                 if (buyAmount > currentAmount) {
@@ -1307,14 +1306,15 @@ bot.command("autobuy", async (ctx) => {
 
       const price = parseCurrency(product.price);
       const balance = parseCurrency(balanceStr);
-      const totalCost = price * parseInt(amount);
+      const checkAmount = parseInt(limit) > 0 ? parseInt(limit) : parseInt(amount);
+      const totalCost = price * checkAmount;
 
       if (balance < totalCost) {
         return ctx.reply(
           `❌ **Không đủ số dư để bật Auto-buy!**\n\n` +
           `🔹 Sản phẩm: ${product.name}\n` +
           `🔹 Giá mỗi sản phẩm: ${product.price}\n` +
-          `🔹 Số lượng mua mỗi lần: ${amount}\n` +
+          `🔹 Số lượng mua dự kiến: ${checkAmount}\n` +
           `🔹 Tổng tiền cần: ${totalCost.toLocaleString('vi-VN')}đ\n` +
           `💰 Số dư hiện tại: ${balanceStr}\n\n` +
           `⚠️ Vui lòng nạp thêm tiền trước khi bật Auto-buy.`
@@ -1390,14 +1390,15 @@ bot.command("schedule", async (ctx) => {
 
     const price = parseCurrency(product.price);
     const balance = parseCurrency(balanceStr);
-    const totalCost = price * parseInt(amount);
+    const checkAmount = parseInt(limit) > 0 ? parseInt(limit) : parseInt(amount);
+    const totalCost = price * checkAmount;
 
     if (balance < totalCost) {
       return ctx.reply(
         `❌ **Không đủ số dư để hẹn giờ Auto-buy!**\n\n` +
         `🔹 Sản phẩm: ${product.name}\n` +
         `🔹 Giá mỗi sản phẩm: ${product.price}\n` +
-        `🔹 Số lượng mua mỗi lần: ${amount}\n` +
+        `🔹 Số lượng mua dự kiến: ${checkAmount}\n` +
         `🔹 Tổng tiền cần: ${totalCost.toLocaleString('vi-VN')}đ\n` +
         `💰 Số dư hiện tại: ${balanceStr}\n\n` +
         `⚠️ Vui lòng nạp thêm tiền trước khi đặt lịch hẹn giờ.`
