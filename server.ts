@@ -366,14 +366,15 @@ bot.command("menu", (ctx) => {
           { text: "🛑 Tắt tất cả Auto-buy", callback_data: "cmd_stop_autobuy" }
         ],
         [
+          { text: "⏰ Đặt hẹn giờ", callback_data: "cmd_schedule_guide" },
+          { text: "🔕 Tắt tất cả hẹn giờ", callback_data: "cmd_stop_schedule" }
+        ],
+        [
           { text: "⚙️ Auto Setup (Azeem)", callback_data: "cmd_auto_setup" },
           { text: "🔍 Quét ngay (Scan)", callback_data: "cmd_scan" }
         ],
         [
-          { text: "⏰ Đặt hẹn giờ", callback_data: "cmd_schedule_guide" },
-          { text: "📖 Hướng dẫn lệnh", callback_data: "cmd_help_guide" }
-        ],
-        [
+          { text: "📖 Hướng dẫn lệnh", callback_data: "cmd_help_guide" },
           { text: "🚪 Đăng xuất", callback_data: "cmd_logout" }
         ]
       ]
@@ -438,6 +439,15 @@ bot.on("callback_query", async (ctx) => {
       log(`Tắt tất cả lệnh Auto-buy qua menu`, userId);
     } else {
       ctx.reply("ℹ️ Hiện tại không có lệnh Auto-buy nào đang bật.");
+    }
+  } else if (cmd === "stop_schedule") {
+    const userId = ctx.from.id.toString();
+    const result = db.prepare("UPDATE monitors SET schedule_time = NULL, schedule_amount = 0, schedule_limit = 0 WHERE user_id = ? AND schedule_time IS NOT NULL").run(userId);
+    if (result.changes > 0) {
+      ctx.reply(`🔕 Đã huỷ thành công ${result.changes} lịch hẹn giờ Auto-buy.`);
+      log(`Huỷ tất cả lịch hẹn giờ qua menu`, userId);
+    } else {
+      ctx.reply("ℹ️ Hiện tại không có lịch hẹn giờ nào đang được đặt.");
     }
   } else if (cmd === "auto_setup") {
     const targetIds = ["21", "78", "108"];
