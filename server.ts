@@ -433,7 +433,7 @@ bot.on("callback_query", async (ctx) => {
     ctx.reply(message);
   } else if (cmd === "stop_autobuy") {
     const userId = ctx.from.id.toString();
-    const result = db.prepare("UPDATE monitors SET auto_buy = 0 WHERE user_id = ? AND auto_buy = 1").run(userId);
+    const result = db.prepare("UPDATE monitors SET auto_buy = 0, auto_buy_amount = 0, buy_limit = 0, bought_count = 0 WHERE user_id = ? AND auto_buy = 1").run(userId);
     if (result.changes > 0) {
       ctx.reply(`🛑 Đã tắt thành công ${result.changes} lệnh Auto-buy đang chạy.`);
       log(`Tắt tất cả lệnh Auto-buy qua menu`, userId);
@@ -1046,7 +1046,8 @@ async function processMonitors(monitors: any[]) {
 
               // Check schedule
               if (currentItem.schedule_time) {
-                const nowStr = new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, hour: '2-digit', minute: '2-digit' });
+                const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+                const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                 if (nowStr === currentItem.schedule_time) {
                   // Time matched! Enable auto-buy
                   db.prepare("UPDATE monitors SET auto_buy = 1, auto_buy_amount = ?, buy_limit = ?, bought_count = 0, schedule_time = NULL, status = 'monitoring' WHERE id = ?")
@@ -1096,7 +1097,7 @@ async function processMonitors(monitors: any[]) {
                 if (buyLimit > 0) {
                   if (currentBought >= buyLimit) {
                     log(`Giới hạn mua đã đạt (${currentBought}/${buyLimit}). Tắt Auto-buy cho ${currentItem.product_name}`, userId);
-                    db.prepare("UPDATE monitors SET auto_buy = 0, last_amount = ? WHERE id = ?").run(currentAmount, currentItem.id);
+                    db.prepare("UPDATE monitors SET auto_buy = 0, auto_buy_amount = 0, buy_limit = 0, bought_count = 0, last_amount = ? WHERE id = ?").run(currentAmount, currentItem.id);
                     await bot.telegram.sendMessage(currentItem.chat_id, `✅ **Đã đạt giới hạn mua hàng** (${currentBought}/${buyLimit}). Đã tự động tắt Auto-buy cho sản phẩm: ${currentItem.product_name}`);
                     continue;
                   }
@@ -1176,7 +1177,7 @@ async function processMonitors(monitors: any[]) {
                       db.prepare("UPDATE monitors SET status = 'purchased', last_amount = ?, bought_count = ? WHERE id = ?").run(currentAmount, newBoughtCount, currentItem.id);
 
                       if (buyLimit > 0 && newBoughtCount >= buyLimit) {
-                        db.prepare("UPDATE monitors SET auto_buy = 0 WHERE id = ?").run(currentItem.id);
+                        db.prepare("UPDATE monitors SET auto_buy = 0, auto_buy_amount = 0, buy_limit = 0, bought_count = 0 WHERE id = ?").run(currentItem.id);
                         await bot.telegram.sendMessage(currentItem.chat_id, `🏁 **Đã đạt giới hạn mua hàng** (${newBoughtCount}/${buyLimit}). Đã tắt Auto-buy cho sản phẩm này.`);
                       }
                     } else {
@@ -1185,7 +1186,7 @@ async function processMonitors(monitors: any[]) {
                       
                       if (isLowBalance) {
                         errorMsg = "Số dư không đủ";
-                        db.prepare("UPDATE monitors SET auto_buy = 0 WHERE id = ?").run(currentItem.id);
+                        db.prepare("UPDATE monitors SET auto_buy = 0, auto_buy_amount = 0, buy_limit = 0, bought_count = 0 WHERE id = ?").run(currentItem.id);
                         log(`Tự động TẮT Auto-buy cho ${currentItem.product_name} do hết số dư.`, userId);
                         await bot.telegram.sendMessage(currentItem.chat_id, `⚠️ **Đã tự động TẮT Auto-buy** cho sản phẩm này vì số dư tài khoản không đủ.`);
                       } else {
@@ -1336,20 +1337,28 @@ bot.command("autobuy", async (ctx) => {
     }
   }
 
-  // Try to update by Monitor ID first, then by Product ID
-  // When enabling auto_buy (val === "1"), we reset status to 'monitoring' to trigger an immediate check in the next cycle
-  // We also reset bought_count to 0 so it doesn't accumulate from previous runs
-  const stmt = db.prepare("UPDATE monitors SET auto_buy = ?, auto_buy_amount = ?, buy_limit = ?, bought_count = CASE WHEN ? = 1 THEN 0 ELSE bought_count END, status = CASE WHEN ? = 1 THEN 'monitoring' ELSE status END WHERE (id = ? OR product_id = ?) AND user_id = ?");
-  const result = stmt.run(parseInt(val), parseInt(amount), parseInt(limit), parseInt(val), parseInt(val), id, id, userId);
+  let stmt;
+  let result;
+  if (val === "1") {
+    stmt = db.prepare("UPDATE monitors SET auto_buy = 1, auto_buy_amount = ?, buy_limit = ?, bought_count = 0, status = 'monitoring' WHERE (id = ? OR product_id = ?) AND user_id = ?");
+    result = stmt.run(parseInt(amount), parseInt(limit), id, id, userId);
+  } else {
+    stmt = db.prepare("UPDATE monitors SET auto_buy = 0, auto_buy_amount = 0, buy_limit = 0, bought_count = 0 WHERE (id = ? OR product_id = ?) AND user_id = ?");
+    result = stmt.run(id, id, userId);
+  }
 
   if (result.changes > 0) {
     log(`Cập nhật Auto-buy cho ID ${id}: ${val === "1" ? "Bật" : "Tắt"} (SL: ${amount}, Giới hạn: ${limit === "0" ? "Không" : limit})`, userId);
-    ctx.reply(
-      `✅ **Đã cập nhật chế độ tự động mua cho ID: ${id}**\n` +
-      `- Trạng thái: ${val === "1" ? "Bật" : "Tắt"}\n` +
-      `- Số lượng mỗi lần: ${amount}\n` +
-      `- Tổng giới hạn mua: ${limit === "0" ? "Không giới hạn" : limit + " con"}`
-    );
+    if (val === "1") {
+      ctx.reply(
+        `✅ **Đã cập nhật chế độ tự động mua cho ID: ${id}**\n` +
+        `- Trạng thái: Bật\n` +
+        `- Số lượng mỗi lần: ${amount}\n` +
+        `- Tổng giới hạn mua: ${limit === "0" ? "Không giới hạn" : limit + " con"}`
+      );
+    } else {
+      ctx.reply(`✅ **Đã tắt chế độ tự động mua và xoá các thông số Auto-buy cho ID: ${id}**`);
+    }
   } else {
     ctx.reply("❌ Không tìm thấy sản phẩm trong danh sách theo dõi của bạn. Vui lòng dùng /list để kiểm tra lại ID (Monitor ID hoặc Product ID).");
   }
@@ -1372,6 +1381,9 @@ bot.command("schedule", async (ctx) => {
   if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) {
     return ctx.reply("❌ Định dạng giờ không hợp lệ. Vui lòng nhập theo định dạng HH:mm (VD: 08:30, 15:45)");
   }
+
+  const [h, m] = time.split(':');
+  const normalizedTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 
   try {
     ctx.reply("🔍 Đang kiểm tra số dư và thông tin sản phẩm...");
@@ -1420,13 +1432,13 @@ bot.command("schedule", async (ctx) => {
   }
 
   const stmt = db.prepare("UPDATE monitors SET schedule_time = ?, schedule_amount = ?, schedule_limit = ? WHERE (id = ? OR product_id = ?) AND user_id = ?");
-  const result = stmt.run(time, parseInt(amount), parseInt(limit), id, id, userId);
+  const result = stmt.run(normalizedTime, parseInt(amount), parseInt(limit), id, id, userId);
 
   if (result.changes > 0) {
-    log(`Hẹn giờ Auto-buy cho ID ${id} lúc ${time} (SL: ${amount}, Giới hạn: ${limit === "0" ? "Không" : limit})`, userId);
+    log(`Hẹn giờ Auto-buy cho ID ${id} lúc ${normalizedTime} (SL: ${amount}, Giới hạn: ${limit === "0" ? "Không" : limit})`, userId);
     ctx.reply(
       `⏰ **Đã đặt lịch hẹn giờ Auto-buy cho ID: ${id}**\n` +
-      `- Thời gian kích hoạt: ${time} (Giờ VN)\n` +
+      `- Thời gian kích hoạt: ${normalizedTime} (Giờ VN)\n` +
       `- Số lượng mỗi lần: ${amount}\n` +
       `- Tổng giới hạn mua: ${limit === "0" ? "Không giới hạn" : limit + " con"}\n\n` +
       `_Lưu ý: Khi đến giờ, bot sẽ tự động bật Auto-buy cho sản phẩm này._`
